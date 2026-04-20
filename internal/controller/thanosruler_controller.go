@@ -65,7 +65,9 @@ var defaultRuleLabels = map[string]string{
 	manifests.DefaultPrometheusRuleLabel: manifests.DefaultPrometheusRuleValue,
 }
 
-var requiredReceiveServiceLabels = map[string]string{}
+var requiredReceiveServiceLabels = map[string]string{
+	manifests.DefaultRemoteWriteAPILabel: manifests.DefaultRemoteWriteAPIValue,
+}
 
 const (
 	defaultTenantIdentifier string = "tenant_id"

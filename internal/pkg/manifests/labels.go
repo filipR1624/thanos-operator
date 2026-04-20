@@ -30,6 +30,10 @@ const (
 	DefaultQueryAPILabel = "operator.thanos.io/query-api"
 	DefaultQueryAPIValue = "true"
 
+	// DefaultRemoteWriteAPILabel is used to identify remote-write APIs and will be set on the resources created by operator.
+	DefaultRemoteWriteAPILabel = "operator.thanos.io/remote-write-api"
+	DefaultRemoteWriteAPIValue = "true"
+
 	// DefaultPrometheusRuleLabel is the default label key for PrometheusRule CRDs
 	DefaultPrometheusRuleLabel = "operator.thanos.io/prometheus-rule"
 	// DefaultPrometheusRuleValue is the default label value for PrometheusRule CRDs
