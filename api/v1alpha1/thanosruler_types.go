@@ -38,12 +38,11 @@ type ThanosRulerSpec struct {
 	// {"operator.thanos.io/query-api": "true", "app.kubernetes.io/part-of": "thanos"}.
 	// +kubebuilder:validation:Optional
 	QueryLabelSelector *metav1.LabelSelector `json:"queryLabelSelector,omitempty"`
-	// StatelessSpec are options used to configure a stateless ruler, which uses remote-write to send rule evaluation
+	// StatelessSpec configures Thanos Ruler in Stateless mode.
 	// results directly to Receive endpoint.
 	// +kubebuilder:validation:Optional
 	StatelessSpec *StatelessSpec `json:"statelessSpec,omitempty"`
-	// StatefulSpec are options used to configure a stateful ruler, which stores rule evaluations results in a local TSDB,
-	// occasionally creating blocks and sending them to ObjectStorage.
+	// StatefulSpec configures Thanos Ruler to write directly to disk and upload generated blocks to object storage.
 	// +kubebuilder:validation:Optional
 	StatefulSpec *StatefulSpec `json:"statefulSpec,omitempty"`
 	// RuleConfigSelector is the label selector to discover ConfigMaps with rule files.
@@ -93,12 +92,12 @@ type ThanosRulerSpec struct {
 }
 
 type StatelessSpec struct {
-	// ReceiveLabelSelector is the label selector to discover Receive endpoints.
-	// It enables adding additional labels to build a custom label selector for discoverable Routers.
+	// LabelSelector discovers remote write endpoints that Ruler will write metrics to.
+	// If multiple services are discovered, the results will be written to each service.
 	// Values provided here will be appended to the default which are:
-	// {"TBD", "app.kubernetes.io/part-of": "thanos"}.
+	// {"operator.thanos.io/remote-write-api: true", "app.kubernetes.io/part-of": "thanos"}.
 	// +kubebuilder:validation:Optional
-	ReceiveLabelSelector *metav1.LabelSelector `json:"receiveLabelSelector,omitempty"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 }
 
 type StatefulSpec struct {
