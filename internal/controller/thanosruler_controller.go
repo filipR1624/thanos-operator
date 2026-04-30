@@ -601,16 +601,24 @@ func (r *ThanosRulerReconciler) getPrometheusRuleConfigMaps(ctx context.Context,
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ThanosRulerReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	serviceLabelPredicate, err := predicate.LabelSelectorPredicate(metav1.LabelSelector{
+	queryServiceLabelPredicate, err := predicate.LabelSelectorPredicate(metav1.LabelSelector{
 		MatchLabels: requiredQueryServiceLabels,
 	})
 	if err != nil {
 		return err
 	}
+	receiveServiceLabelPredicate, err := predicate.LabelSelectorPredicate(metav1.LabelSelector{
+		MatchLabels: requiredReceiveServiceLabels,
+	})
+	if err != nil {
+		return err
+	}
 
-	svcOnLabelChangePredicate := predicate.And(serviceLabelPredicate, predicate.LabelChangedPredicate{})
-	svcOnGenChangePredicate := predicate.And(serviceLabelPredicate, predicate.GenerationChangedPredicate{})
-	svcPredicate := predicate.Or(svcOnLabelChangePredicate, svcOnGenChangePredicate)
+	querySvcOnLabelChangePredicate := predicate.And(queryServiceLabelPredicate, predicate.LabelChangedPredicate{})
+	querySvcOnGenChangePredicate := predicate.And(queryServiceLabelPredicate, predicate.GenerationChangedPredicate{})
+	receiveSvcOnLabelChangePredicate := predicate.And(receiveServiceLabelPredicate, predicate.LabelChangedPredicate{})
+	receiveSvcOnGenChangePredicate := predicate.And(receiveServiceLabelPredicate, predicate.GenerationChangedPredicate{})
+	svcPredicate := predicate.Or(querySvcOnLabelChangePredicate, querySvcOnGenChangePredicate, receiveSvcOnLabelChangePredicate, receiveSvcOnGenChangePredicate)
 
 	configMapPredicate, err := predicate.LabelSelectorPredicate(metav1.LabelSelector{
 		MatchLabels: defaultRuleLabels,
@@ -658,7 +666,7 @@ func (r *ThanosRulerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // that matches the Service.
 func (r *ThanosRulerReconciler) enqueueForService() handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-		if !r.isQueueableQueryService(obj) {
+		if !r.isQueueableQueryService(obj) && !r.isQueueableRemoteWriteService(obj) {
 			return []reconcile.Request{}
 		}
 
@@ -675,12 +683,12 @@ func (r *ThanosRulerReconciler) enqueueForService() handler.EventHandler {
 
 		requests := []reconcile.Request{}
 		for _, ruler := range rulers.Items {
-			selector, err := manifests.BuildLabelSelectorFrom(ruler.Spec.QueryLabelSelector, requiredQueryServiceLabels)
+			querySelector, err := manifests.BuildLabelSelectorFrom(ruler.Spec.QueryLabelSelector, requiredQueryServiceLabels)
 			if err != nil {
 				r.logger.Error(err, "failed to build label selector from ruler query label selector", "ruler", ruler.GetName())
 				continue
 			}
-			if selector.Matches(labels.Set(obj.GetLabels())) {
+			if querySelector.Matches(labels.Set(obj.GetLabels())) {
 				r.metrics.ServiceWatchesReconciliationsTotal.WithLabelValues(ruler.GetName(), ruler.GetNamespace()).Inc()
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
@@ -688,6 +696,23 @@ func (r *ThanosRulerReconciler) enqueueForService() handler.EventHandler {
 						Namespace: ruler.GetNamespace(),
 					},
 				})
+			}
+
+			if ruler.Spec.StatelessSpec != nil {
+				receiveSelector, err := manifests.BuildLabelSelectorFrom(ruler.Spec.StatelessSpec.LabelSelector, requiredReceiveServiceLabels)
+				if err != nil {
+					r.logger.Error(err, "failed to build label selector from ruler stateless label selector", "ruler", ruler.GetName())
+					continue
+				}
+				if receiveSelector.Matches(labels.Set(obj.GetLabels())) {
+					r.metrics.ServiceWatchesReconciliationsTotal.WithLabelValues(ruler.GetName(), ruler.GetNamespace()).Inc()
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      ruler.GetName(),
+							Namespace: ruler.GetNamespace(),
+						},
+					})
+				}
 			}
 		}
 
@@ -740,6 +765,12 @@ func (r *ThanosRulerReconciler) enqueueForConfigMap() handler.EventHandler {
 func (r *ThanosRulerReconciler) isQueueableQueryService(obj client.Object) bool {
 	_, isGRPCSvc := manifests.IsGrpcServiceWithLabels(obj, requiredQueryServiceLabels)
 	return isGRPCSvc
+}
+
+// isQueueableRemoteWriteService returns true if the Service is a remote-write API service that is part of a 'thanos' and has a remote-write port.
+func (r *ThanosRulerReconciler) isQueueableRemoteWriteService(obj client.Object) bool {
+	_, isRWSvc := manifests.IsRemoteWriteServiceWithLabels(obj, requiredQueryServiceLabels)
+	return isRWSvc
 }
 
 // Add this new function to handle PrometheusRule events
